@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<types:mule xmlns:types="http://www.mulesoft.org/schema/mule/types">
+  <types:catalog>
+    <types:type name="CreateOrder" format="json">
+      <types:shape format="weave" example="examples/Order_sample.json"><![CDATA[%dw 2.0
+
+type CreateOrder = {|
+  orderId: String, 
+  AccountId: String, 
+  orderBy: String, 
+  ShippingAddress: String, 
+  orderList: Array<{|    itemNumber: String,     itemName: String,     quantity: String  |}>
+|} {"example": "{\\\"orderId\\\":\\\"3543\\\",\\\"AccountId\\\":\\\"1231123X\\\",\\\"orderBy\\\":\\\"sam\\\",\\\"ShippingAddress\\\":\\\"buffalo grove, illinois\\\",\\\"orderList\\\":[{\\\"itemNumber\\\":\\\"3446\\\",\\\"itemName\\\":\\\"pen\\\",\\\"quantity\\\":\\\"200\\\"}]}"}
+
+]]></types:shape>
+    </types:type>
+  </types:catalog>
+  <types:enrichment select="#7b71e267-0d1b-4885-ba13-98366bdec5f7">
+    <types:processor-declaration>
+      <types:input-event>
+        <types:message>
+          <types:payload type="CreateOrder"/>
+        </types:message>
+      </types:input-event>
+    </types:processor-declaration>
+  </types:enrichment>
+</types:mule>

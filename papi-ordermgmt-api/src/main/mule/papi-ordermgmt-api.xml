@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:api-gateway="http://www.mulesoft.org/schema/mule/api-gateway" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/api-gateway http://www.mulesoft.org/schema/mule/api-gateway/current/mule-api-gateway.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="c76c6dac-adba-4c6a-82df-7e3a6403dc1c" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<api-gateway:autodiscovery apiId="15985026" doc:name="API Autodiscovery" doc:id="b338284d-b8ba-4036-b2d2-19e5e7859a4e" flowRef="papi-ordermgmt-apiFlow" />
+	<flow name="papi-ordermgmt-apiFlow" doc:id="13180514-e4ac-4f7e-acd8-f98f4b47476a" >
+		<http:listener doc:name="Listener" doc:id="63322a81-1869-4ec6-9ef2-fee2031c6fac" config-ref="HTTP_Listener_config" path="/CreateOrder" outputMimeType="application/json"/>
+		<async doc:name="Async" doc:id="c6cfbe45-0df7-4050-a7cc-53bcf4a94917" >
+			<logger level="INFO" doc:name="Logger" doc:id="6fd8b601-83dc-41c5-86ce-ee6f0e7d5515" message="API-Name : OrderProcessAPI  API-Version : 1.0  Mule-App : papi-ordermgmt-api@CreateOrder(incoming) Http-Req-Header : #[attributes]    Http-Req-Payload : #[payload]" category="MuleLogger" />
+		</async>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="b5f3d533-974a-4e0d-9c59-96872a4663e3" variableName="InitialReq"/>
+		<choice doc:name="Choice" doc:id="d2261498-713f-4997-84cf-387bcad7f1fb" >
+			<when expression='#[payload.AccountId == null or payload.AccountId == ""]'>
+				<flow-ref doc:name="CreateCustomer" doc:id="fe5e1272-d615-44c5-9f0e-a36c83bb2f6d" name="CreateCustomer"/>
+				<set-variable value="#[payload.CreateCustomerRes[0].CustomerId]" doc:name="Set Variable" doc:id="fa8da29b-d215-4cb8-8132-93d2cdec7245" variableName="AccountID"/>
+				<logger level="INFO" doc:name="Logger" doc:id="ee93b394-e0cb-453e-adc5-b57d14d7bd6f" message="#[payload]"/>
+				<choice doc:name="Choice" doc:id="93683254-bc74-48c9-8c80-ccd5a5b6340e" >
+					<when expression='#[payload.CreateCustomerRes[0].StatusCode == "Success"]'>
+						<set-payload value="#[vars.InitialReq]" doc:name="Set Payload" doc:id="e3925f88-9c2a-4a69-9f23-585bf2c8679e" />
+						<flow-ref doc:name="Flow Reference" doc:id="15d72b8d-441d-4c48-9674-21721e6a9334" name="papi-ordermgmt-api-FullFillment-subflow"/>
+						<set-payload value='#[%dw 2.0
+output application/json
+---
+response : { 
+  CreateCustomer: "Success" as String,
+  CustomerId : vars.AccountID  as String,
+  CreateOrder: if (vars.OrderStatus as String == "Success") "Order created successfully"  else vars.OrderStatus as String
+  }]' doc:name="Set Payload" doc:id="411cf183-8778-4438-a88e-00ad7c661149" />
+					</when>
+					<otherwise >
+						<set-payload value="#[Error : vars.CreateCustomerResp.StatusCode]" doc:name="Set Payload" doc:id="57ca39b4-9d4f-4f5a-a995-7733c7fe30fb" />
+					</otherwise>
+				</choice>
+				<async doc:name="Async" doc:id="107241a6-5449-40b0-b888-08cc4c567b89" >
+					<logger level="INFO" doc:name="Logger" doc:id="ad79ed3a-ae2a-423c-a8c0-f0f8c21c6837" message="API-Name : AccountsAPI  API-Version : 1.0  Mule-App : papi-customer-sfdc@QueryCustomer(Outgoing) Http-Res-Header : #[attributes]    Http-Res-Payload : #[payload]" category="MuleLogger" />
+				</async>
+			</when>
+			<otherwise>
+				<flow-ref doc:name="Flow Reference" doc:id="ba91d1a1-4f5f-462c-b480-d86be0478299" name="papi-ordermgmt-api-FullFillment-subflow"/>
+			</otherwise>
+		</choice>
+	</flow>
+	<flow name="CreateCustomer" doc:id="565ea4d2-3d94-4509-92da-8845bccfb643" >
+		<set-variable value="payload.OrderBy" doc:name="Set Variable" doc:id="ce466135-63ae-4ab3-b476-7ca71771ad37" variableName="Name"/>
+		<ee:transform doc:name="Transform Message" doc:id="7b71e267-0d1b-4885-ba13-98366bdec5f7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+"Customer" : {
+  "Name" : payload.orderBy,
+  "Type" : "Online",
+  "Address" : payload.ShippingAddress
+}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<async doc:name="Async" doc:id="a96f2975-49c5-4fb4-a5a2-37a6d818aad5" >
+			<logger level="INFO" doc:name="Logger" doc:id="59f7166d-05af-4beb-8f38-7f4dd42ea723" message="API-Name : OrderProcessAPI  API-Version : 1.0  Mule-App : papi-customer-sfdc@CreateAccount(Call AccountsAPI) Http-Req-Header : #[attributes]    Http-Req-Payload : #[payload]" category="MuleLogger" />
+		</async>
+		<http:request method="GET" doc:name="Request" doc:id="08ce50d8-156e-44d3-a5ef-30fb9cce8807" url="http://sapi-customer-sfdc.us-e2.cloudhub.io/CreateCustomer" sendCorrelationId="AUTO" sendBodyMode="ALWAYS">
+		</http:request>
+		<async doc:name="Async" doc:id="ef35f70a-fbed-40eb-8976-22fdf682963d" >
+			<logger level="INFO" doc:name="Logger" doc:id="24f129c5-bac5-4548-972d-5135002e731a" message="API-Name : OrderProcessAPI  API-Version : 1.0  Mule-App : papi-customer-sfdc@CreateAccount(Call AccountsAPI) Http-Res-Header : #[attributes]    Http-Res-Payload : #[payload]" category="MuleLogger" />
+		</async>
+		<error-handler>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="8d8dbfbb-79cb-4b3f-aa3d-9c653ee43a53" type="ANY">
+				<set-payload value='#[%dw 2.0
+output application/json
+---
+CreateCustomerRes : {
+	"Name" : vars.Name,
+	"CustomerId" : "",
+	"StatusCode" : "Customer Creation Failed",
+	 StatusDescription : if (error.errorMessage != null) error.errorMessage else error.description
+	}]' doc:name="Set Payload" doc:id="f4615c75-2734-4599-8b7d-386712ca0b9c" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<sub-flow name="papi-ordermgmt-api-FullFillment-subflow" doc:id="bcd080f7-30c8-4a6b-b33c-c4e1ef0debed" >
+		<ee:transform doc:name="Transform Message" doc:id="5925b8f7-b642-4139-acef-40d9867044c3">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+items:
+payload.orderList map (value, index) -> { 
+	"itemNumber": value.itemNumber as String,
+	 "itemName": value.itemName as String,
+	 "quantity": value.quantity as String
+}
+
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+		<async doc:name="Async" doc:id="e83124fb-da13-4d6f-955f-8f8408ab5a00" >
+			<logger level="INFO" doc:name="Logger" doc:id="d50c20c1-d8a1-48bc-aae0-7ca7828542ed" message="API-Name : OrderProcessAPI  API-Version : 1.0  Mule-App : papi-ordermgmt-api@CreateOrder(Call FulfillmentAPI) Http-Req-Header : #[attributes]    Http-Req-Payload : #[payload]" />
+		</async>
+		<http:request method="POST" doc:name="Request" doc:id="0d576c15-6480-47bc-add9-bf6cffc928a6" url="http://sapi-fullfillment-iseries.us-e2.cloudhub.io/OrderFulfillment" />
+		<async doc:name="Async" doc:id="005ee1ae-b4b6-4d83-b428-0e7daf939b71" >
+			<logger level="INFO" doc:name="Logger" doc:id="2996a7cb-1b41-4441-8726-693fcdc8d2d7" message="API-Name : OrderProcessAPI  API-Version : 1.0  Mule-App : papi-ordermgmt-api@CreateOrder(Call FulfillmentAPI) Http-Res-Header : #[attributes]    Http-Res-Payload : #[payload]" />
+		</async>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="a5ba91e9-8790-4466-8fe3-d5c382cd61a6" variableName="OrderStatus" />
+		<set-payload value='#[%dw 2.0
+output application/json
+---
+response : { 
+  CreateOrder: if (vars.OrderStatus as String == "Success") "Order creation Success"  else vars.OrderStatus as String
+  }]' doc:name="Set Payload" doc:id="1855f9da-29aa-411a-a9db-bd098950b985" />
+	</sub-flow>
+</mule>
